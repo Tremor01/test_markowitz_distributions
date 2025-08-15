@@ -6,6 +6,7 @@ from plotting import plot_metrics
 from portfolio_strategies.constants import START_CAPITAL
 from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy
 from data import get_prices, get_volumes
+from checkers import ReportBuilder
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -54,7 +55,7 @@ def simulate(
     for _ in range(len(prices) // step - 1):
         train_prices = prices.iloc[left: right]
         train_volumes = volumes.iloc[left: right]
-        test_prices = prices.iloc[right: right + step]
+        test_prices = prices.iloc[right - 1: right + step]
 
         if train_prices.empty or train_volumes.empty or test_prices.empty:
             right += step; left += step
@@ -73,9 +74,8 @@ def simulate(
 
         right += step; left += step
 
-    # for strategy in strategies:
-    #     wh = pd.DataFrame(strategy.weights_for_report)
-    #     wh.to_csv(fr"data\{strategy.name}_{train_period}_{step}_{START_CAPITAL}.csv")
+    builder = ReportBuilder(prices, volumes, strategies)
+    builder.build_report()
 
     if plot: plot_metrics(strategies, file_name)
 

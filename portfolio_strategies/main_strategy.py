@@ -28,6 +28,11 @@ class Strategy:
 
         self.strategy = strategy
 
+        self.data_for_report = {
+            'weights': defaultdict(lambda: defaultdict(dict)),
+            'capital': defaultdict(float),
+        }
+
     @property
     def name(self) -> str:
         return self.__class__.__name__
@@ -52,55 +57,59 @@ class Strategy:
         return {coin: self._capital * weight for coin, weight in self._weights}
 
     def training(self, prices: pd.DataFrame, volumes: pd.DataFrame):
-        if self.strategy is not None:
-            self._weights.clear()
-            self._quantities.clear()
+        if self.strategy is None:
+            if len(self._quantities) == 0:
+                self._set_quantity(prices)
+            self._fix_weights(prices, volumes)
+            self._save_statistics(prices)
+            return
 
-        if self.strategy is not None:
-            self._weights = partial(self.strategy, min_weights=MIN_INVEST / self._capital)(prices)
-            if self._weights is None: self._weights = dict()
-            # self._weights = self.strategy(prices)
+        self._weights.clear()
+        self._quantities.clear()
+
+        self._weights = partial(self.strategy, min_weights=MIN_INVEST / self._capital)(prices)
+        if self._weights is None:
+            self._weights = dict()
 
         self._fix_weights(prices, volumes)
 
-        if self.strategy is not None or (self.strategy is None and len(self._quantities) == 0):
-            self._set_quantity(prices)
-
+        self._set_quantity(prices)
         self._save_statistics(prices)
 
     def _fix_weights(self, prices: pd.DataFrame, volumes: pd.DataFrame):
-        self._normalize_weights()
+        date = prices.index[-1]
+        self.data_for_report['weights'][date]['clear'] = deepcopy(self._weights)
 
-        self._reset_less_min_w()
-        
         self._normalize_weights()
-        self._only_ten_percent_volume(prices, volumes)
+        self.data_for_report['weights'][date]['normalize'] = deepcopy(self._weights)
+
+        self._greater_or_equal_min_invest()
+        self.data_for_report['weights'][date]['min_weights'] = deepcopy(self._weights)
+
+        self._less_or_equal_volume_percent(prices, volumes)
+        self.data_for_report['weights'][date]['volumes_percent'] = deepcopy(self._weights)
+        
+        self.data_for_report['weights'][date]['final'] = deepcopy(self._weights)
+        self.data_for_report['capital'][date] = self._capital
 
     def _normalize_weights(self):
         sum_ = sum([abs(weight) for _, weight in self._weights.items()])
         if sum_ == 0: return
 
-        for coin, weight in self._weights.items():
+        for coin in self._weights:
             self._weights[coin] /= sum_
 
-    def _reset_less_min_w(self):
+    def _greater_or_equal_min_invest(self):
         for coin, weight in self._weights.items():
             if abs(weight * self._capital) < MIN_INVEST: self._weights[coin] = 0
 
-    def _keep_last(self, train_prices: pd.DataFrame):
-        if len(self.weights_history) > 0:
-            for coin in self.weights_history[-1]:
-                if train_prices[coin].isna().sum() > 0:
-                    self._weights.clear()
-                    return
-
-            self._weights = deepcopy(self.weights_history[-1])
+        self._normalize_weights()
 
     def _save_statistics(self, prices: pd.DataFrame):
         self.weights_history.append(deepcopy(self._weights))
         self.rebalancing_dates.append(prices.index[-1])
 
-    def _only_ten_percent_volume(self, prices: pd.DataFrame, volumes: pd.DataFrame):
+    def _less_or_equal_volume_percent(self, prices: pd.DataFrame, volumes: pd.DataFrame):
         date = prices.index[-1]
         for coin, weight in self._weights.items():
             daily_volume = volumes.loc[date, coin]
@@ -143,6 +152,4 @@ class Strategy:
 __all__ = [
     'Metrics',
     'Strategy',
-    'FEE_RATE',
-    'START_CAPITAL'
 ]
