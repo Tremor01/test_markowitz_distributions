@@ -5,72 +5,36 @@ from plotting import plot_metrics
 
 from portfolio_strategies.main_strategy import Strategy, START_CAPITAL
 from portfolio_strategies import StrategyBTC, SHARP_SHORT
+from data import get_prices, get_volumes
 
 import warnings
 warnings.filterwarnings("ignore")
 
-import os
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(script_dir, 'data')
+PRICES = get_prices()
+VOLUMES = get_volumes()
 
-prices_path = os.path.join(data_dir, 'prices_binance.xlsx')
-volumes_path = os.path.join(data_dir, 'volumes_binance.xlsx')
 
-PRICES = pd.read_excel(prices_path)
-PRICES = PRICES.set_index('Unnamed: 0')
-PRICES.index.name = 'Date'
-
-VOLUMES = pd.read_excel(volumes_path)
-VOLUMES = VOLUMES.set_index('Unnamed: 0')
-VOLUMES.index.name = 'Date'
+def free_tests() -> tuple[pd.DataFrame, pd.DataFrame]:
+    prices = PRICES.iloc[869:1965]
+    valid_coins = [
+        coin for coin in prices.columns
+        if prices[coin].isna().sum() == 0 and prices[coin].isna().sum() == 0
+    ]
+    return prices[valid_coins], VOLUMES[valid_coins]
 
 
 def main():
-    train, test = 360, 30
+    train, test = 30, 7
 
-    s = [
-        (deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-    ]
+    prices, volumes = free_tests()
+
+    s = [(deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
     for strategies, train_period, step in s:
         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
         t = time.time()
-        simulate(
-            deepcopy(strategies), file_name, train_period, step,
-            PRICES.iloc[180:], VOLUMES.iloc[180:], plot=True
-        )
+        simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
         print(time.time() - t)
-
-    # for a in range(0, 101, 10):
-    #     a /= 100
-    #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
-    #     s = [
-    #         ([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-    #     ]
-    #
-    #     for strategies, train_period, step in s:
-    #         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
-    #         t = time.time()
-    #         simulate(
-    #             deepcopy(strategies), file_name, train_period, step,
-    #             PRICES.iloc[180:], VOLUMES.iloc[180:], plot=True
-    #         )
-    #         print(time.time() - t)
-
-    # for rf in range(0, 6):
-    #     rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
-    #     s = [
-    #         ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-    #     ]
-    #
-    #     for strategies, train_period, step in s:
-    #         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
-    #         t = time.time()
-    #         simulate(
-    #             deepcopy(strategies), file_name, train_period, step,
-    #             PRICES.iloc[180:], VOLUMES.iloc[180:], plot=True
-    #         )
-    #         print(time.time() - t)
 
 
 def simulate(
@@ -80,8 +44,8 @@ def simulate(
         step: int,
         prices: pd.DataFrame,
         volumes: pd.DataFrame,
-        start_period=0,
-        plot=True
+        start_period: int = 0,
+        plot: bool = True
 ):
     if len(prices) < start_period: return
 
@@ -108,12 +72,11 @@ def simulate(
 
         right += step; left += step
 
-    for strategy in strategies:
-        wh = pd.DataFrame(strategy.weights_history)
-        wh.to_excel(fr"data\{strategy.name}_{train_period}_{step}_{START_CAPITAL}.xlsx")
+    # for strategy in strategies:
+    #     wh = pd.DataFrame(strategy.weights_history)
+    #     wh.to_excel(fr"data\{strategy.name}_{train_period}_{step}_{START_CAPITAL}.xlsx")
 
-    if plot:
-        plot_metrics(strategies, file_name, list(PRICES.columns))
+    if plot: plot_metrics(strategies, file_name, list(PRICES.columns))
 
 
 def filter_coins(train_prices: pd.DataFrame, test_prices: pd.DataFrame, volumes: pd.DataFrame):

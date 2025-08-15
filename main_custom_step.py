@@ -1,40 +1,20 @@
 import time
-from collections import defaultdict
 from copy import deepcopy
 import pandas as pd
 
-from cheker.common import StrategyChecker
-from funcs import get_rebalanced_return
-from plotting import plot_metrics, plot_month_statistics, plot_coin_prices_interactive
-#from tqdm import trange
+from checkers.common import StrategyChecker
+from plotting import plot_metrics
 
-from portfolio_strategies.main_strategy import Strategy, START_CAPITAL, Metrics
-from portfolio_strategies import (
-    StrategyBTC, MIN_RISK, MAX_RET,
-    SHARP, SHARP_SHORT, PORTFOLIO, ALPHA
-)
+from portfolio_strategies.main_strategy import Strategy, START_CAPITAL
+from portfolio_strategies import StrategyBTC, SHARP_SHORT
+from data import get_prices, get_volumes
 
 import warnings
-
 warnings.filterwarnings("ignore")
 
-import os
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(script_dir, 'data', 'excel_files')
-
-prices_path = os.path.join(data_dir, 'prices_binance.xlsx')
-volumes_path = os.path.join(data_dir, 'volumes_binance.xlsx')
-
-PRICES = pd.read_excel(prices_path)
-PRICES = PRICES.set_index('Unnamed: 0')
-PRICES.index.name = 'Date'
-
-VOLUMES = pd.read_excel(volumes_path)
-VOLUMES = VOLUMES.set_index('Unnamed: 0')
-VOLUMES.index.name = 'Date'
-
-MONTH_STATS = defaultdict(lambda: defaultdict(list))
+PRICES = get_prices()
+VOLUMES = get_volumes()
 
 
 def main():
