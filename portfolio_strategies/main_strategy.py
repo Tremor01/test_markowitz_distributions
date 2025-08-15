@@ -113,8 +113,9 @@ class Strategy:
         date = prices.index[-1]
         for coin, weight in self._weights.items():
             daily_volume = volumes.loc[date, coin]
-            if abs(weight * self._capital) > VOLUME_PERCENT * daily_volume / 100.0:
-                self._weights[coin] = (VOLUME_PERCENT * daily_volume) / self._capital
+            volume_percent = VOLUME_PERCENT * daily_volume / 100.0
+            if abs(weight * self._capital) > volume_percent:
+                self._weights[coin] = volume_percent / self._capital
 
     def _set_quantity(self, prices: pd.DataFrame):
         purchase_prices = prices.iloc[-1]
