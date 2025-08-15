@@ -187,15 +187,12 @@ def sharp_ratio(
     # objective = cp.Minimize( - (portfolio_return - risk_free_rate) / portfolio_risk + cp.sum_squares(weights) * smearing_coefficient)
     objective = cp.Minimize(portfolio_risk)
     constraints = [
-        (expected_returns_np - risk_free_rate * one).T @ weights == 1,  # type: ignore
+        expected_returns_np @ weights - risk_free_rate * k == 1,  # type: ignore
         cp.sum(cp.pos(weights)) + cp.sum(cp.neg(weights)) <= k * leverage,
         cp.abs(weights) <= k * leverage,
         k >= 0,
     ]
-    if not is_short:
-        constraints += [weights >= min_weights * k]
-    # else:
-    #     constraints += [cp.abs(weights) >= min_weights * k]
+    constraints += [cp.abs(weights) >= min_weights * k]
 
     problem = cp.Problem(objective, constraints)
     for solver in cp.installed_solvers():
