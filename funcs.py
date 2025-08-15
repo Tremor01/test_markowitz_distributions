@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-
 from portfolio_strategies.constants import START_CAPITAL
 
 

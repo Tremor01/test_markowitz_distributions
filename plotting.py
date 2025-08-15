@@ -1,6 +1,5 @@
 import json
 import os
-import pprint
 from copy import deepcopy
 
 import numpy as np
@@ -11,8 +10,10 @@ import pandas as pd
 from portfolio_strategies import StrategyBTC, MIN_RISK, MAX_RET, SHARP, SHARP_SHORT
 from portfolio_strategies.main_strategy import Metrics
 
+
 current_dir = os.path.dirname(__file__)
 plots_dir = os.path.join(current_dir, "portfolio_plots")
+os.makedirs(plots_dir, exist_ok=True)
 
 
 def plot_metrics(strategies, file_name: str, coins: list[str], reports: dict = None):
