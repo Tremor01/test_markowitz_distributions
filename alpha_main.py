@@ -3,8 +3,8 @@ from copy import deepcopy
 import pandas as pd
 from plotting import plot_metrics
 
-from portfolio_strategies.main_strategy import Strategy, START_CAPITAL
-from portfolio_strategies import StrategyBTC, SHARP_SHORT
+from portfolio_strategies.constants import START_CAPITAL
+from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy
 from data import get_prices, get_volumes
 
 import warnings
@@ -16,12 +16,13 @@ VOLUMES = get_volumes()
 
 
 def free_tests() -> tuple[pd.DataFrame, pd.DataFrame]:
-    prices = PRICES.iloc[869:1965]
+    prices  =  PRICES.iloc[869: 1965]
+    volumes = VOLUMES.iloc[869: 1965]
     valid_coins = [
         coin for coin in prices.columns
         if prices[coin].isna().sum() == 0 and prices[coin].isna().sum() == 0
     ]
-    return prices[valid_coins], VOLUMES[valid_coins]
+    return prices[valid_coins], volumes[valid_coins]
 
 
 def main():
@@ -42,7 +43,7 @@ def simulate(
         file_name: str,
         train_period: int,
         step: int,
-        prices: pd.DataFrame,
+        prices:  pd.DataFrame,
         volumes: pd.DataFrame,
         start_period: int = 0,
         plot: bool = True
@@ -73,10 +74,10 @@ def simulate(
         right += step; left += step
 
     # for strategy in strategies:
-    #     wh = pd.DataFrame(strategy.weights_history)
-    #     wh.to_excel(fr"data\{strategy.name}_{train_period}_{step}_{START_CAPITAL}.xlsx")
+    #     wh = pd.DataFrame(strategy.weights_for_report)
+    #     wh.to_csv(fr"data\{strategy.name}_{train_period}_{step}_{START_CAPITAL}.csv")
 
-    if plot: plot_metrics(strategies, file_name, list(PRICES.columns))
+    if plot: plot_metrics(strategies, file_name)
 
 
 def filter_coins(train_prices: pd.DataFrame, test_prices: pd.DataFrame, volumes: pd.DataFrame):

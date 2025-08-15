@@ -16,7 +16,7 @@ plots_dir = os.path.join(current_dir, "portfolio_plots")
 os.makedirs(plots_dir, exist_ok=True)
 
 
-def plot_metrics(strategies, file_name: str, coins: list[str], reports: dict = None):
+def plot_metrics(strategies, file_name: str, reports: dict = None):
     metric_names = [metric for metric in Metrics]
 
     # Определяем начальные specs: по одному subplot на метрику + 1 для таблицы весов + 1 для таблицы отчетов
