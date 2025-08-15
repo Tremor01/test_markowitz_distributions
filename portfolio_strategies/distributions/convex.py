@@ -122,7 +122,7 @@ def minimize_risk(
     if weights.value is None: return None
 
     weights = np.array(weights.value, ndmin=2).T
-    return weights / np.sum(np.abs(weights)) #type: ignore
+    return weights #type: ignore
 
 
 def maximize_profit(
@@ -161,7 +161,7 @@ def maximize_profit(
     if weights.value is None: return None
 
     weights = np.array(weights.value, ndmin=2).T
-    return weights / np.sum(np.abs(weights)) #type: ignore
+    return weights #type: ignore
 
 
 def sharp_ratio(
@@ -208,5 +208,5 @@ def sharp_ratio(
     if weights.value is None: return None
 
     weights = np.array(weights.value / k.value, ndmin=2).T  # type: ignore
-    return weights / np.sum(np.abs(weights))  # type: ignore
+    return weights # type: ignore
 
