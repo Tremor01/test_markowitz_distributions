@@ -189,9 +189,9 @@ def sharp_ratio(
     constraints = [
         expected_returns_np @ weights - risk_free_rate * k == 1,  # type: ignore
         cp.sum(cp.pos(weights)) + cp.sum(cp.neg(weights)) <= k * leverage,
+        cp.abs(weights) <= k * leverage,
         k >= 0,
     ]
-    constraints += [cp.abs(weights) >= min_weights * k]
 
     problem = cp.Problem(objective, constraints)
     for solver in cp.installed_solvers():

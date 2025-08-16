@@ -101,7 +101,8 @@ class Strategy:
 
     def _greater_or_equal_min_invest(self):
         for coin, weight in self._weights.items():
-            if abs(weight * self._capital) < MIN_INVEST: self._weights[coin] = 0
+            if abs(weight) * self._capital < MIN_INVEST - 1e-3:
+                self._weights[coin] = 0
 
         self._normalize_weights()
 

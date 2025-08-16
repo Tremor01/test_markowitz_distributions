@@ -74,13 +74,14 @@ class ReportBuilder:
 
             sum_of_weights += (sum_ - 1 > 1e-6)
 
-            min_weights += (cur_min * capital < self._min_invest and cur_min != 0)
+            min_weights += (cur_min * capital < self._min_invest - 1e-3 and cur_min != 0)
             self._report[strategy.name]['weights'].append({
                 'date': date,
                 'sum_weights': sum_,
                 'sum_positive': sum_plus,
                 'sum_negative': sum_mines,
                 'min_weight': cur_min,
+                'capital': capital,
                 'min_weight_in_cash': cur_min * capital,
                 'greater_then_daily_volume': cnt_incorrect_coins
             })
