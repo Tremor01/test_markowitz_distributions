@@ -72,7 +72,8 @@ class ReportBuilder:
             sum_plus  = sum([w for _, w in weights.items() if w > 0])
             sum_mines = sum([w for _, w in weights.items() if w < 0])
 
-            sum_of_weights += (sum_ > 1)
+            sum_of_weights += (sum_ - 1 > 1e-6)
+
             min_weights += (cur_min * capital < self._min_invest and cur_min != 0)
             self._report[strategy.name]['weights'].append({
                 'date': date,
