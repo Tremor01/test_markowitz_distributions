@@ -48,9 +48,10 @@ class ReportBuilder:
 
     def _check_weights(self, strategy: Strategy):
         min_w = volume_percent = normalize = 0
-        self._report[strategy.name]['weights'] = list()
+        self._report[strategy.name]['stats_weights'] = list()
+        self._report[strategy.name]['list_weights'] = list()
 
-        sum_of_weights = min_weights = 0
+        sum_of_weights = min_weights = daily_volume = 0
         for date in strategy.rebalancing_dates:
             fmin_w, fvolume_percent, fnormalize = self._check_weights_change(strategy.data_for_report['weights'][date])
             min_w += fmin_w; volume_percent += fvolume_percent; normalize += fnormalize
@@ -63,19 +64,18 @@ class ReportBuilder:
             except ValueError:
                 cur_min = 0.0
 
-            cnt_incorrect_coins = 0
             for coin, weight in weights.items():
                 if abs(weight * capital) > self._volume_percent * self._volumes.loc[date, coin] / 100:
-                    cnt_incorrect_coins += 1
+                    daily_volume += 1
 
             sum_ = sum([abs(w) for _, w in weights.items()])
             sum_plus  = sum([w for _, w in weights.items() if w > 0])
             sum_mines = sum([w for _, w in weights.items() if w < 0])
 
             sum_of_weights += (sum_ - 1 > 1e-6)
-
             min_weights += (cur_min * capital < self._min_invest - 1e-3 and cur_min != 0)
-            self._report[strategy.name]['weights'].append({
+
+            self._report[strategy.name]['stats_weights'].append({
                 'date': date,
                 'sum_weights': sum_,
                 'sum_positive': sum_plus,
@@ -83,11 +83,16 @@ class ReportBuilder:
                 'min_weight': cur_min,
                 'capital': capital,
                 'min_weight_in_cash': cur_min * capital,
-                'greater_then_daily_volume': cnt_incorrect_coins
+                'greater_then_daily_volume': daily_volume,
             })
+            self._report[strategy.name]['list_weights'].append(
+                {'date': date, 'weights': weights}
+            )
+
         self._report[strategy.name]['correct_weights'] = {
             'sum': sum_of_weights,
-            'min_w': min_weights
+            'min_w': min_weights,
+            'daily_volume': daily_volume,
         }
         self._report[strategy.name]['change_weights'] = {
             'min_w': min_w, 
@@ -305,15 +310,31 @@ class ReportBuilder:
                 html_parts.append('</ul>')
 
             # === Проверка весов ===
-            if 'weights' in metrics:
-                df_weights = DataFrame(metrics['weights'])
+            if 'stats_weights' in metrics:
+                df_weights = DataFrame(metrics['stats_weights'])
                 cw = metrics['correct_weights']
                 if not df_weights.empty:
                     df_weights = df_weights.set_index('date')
                     html_parts.append('<h3>📉 Веса портфеля</h3>')
                     html_parts.append(f"<li><b>Сумма весов больше единицы:</b> {f'❌ Да {cw['sum']} раз' if cw['sum'] else '✅ Нет'}</li>")
                     html_parts.append(f"<li><b>Минимальный вес меньше {self._min_invest}$:</b> {f'❌ Да {cw['min_w']} раз' if cw['min_w'] else '✅ Нет'}</li>")
+                    html_parts.append(f"<li><b>Вес больше чем {self._volume_percent}% дневного объёма:</b> {f'❌ Да {cw['daily_volume']} раз' if cw['daily_volume'] else '✅ Нет'}</li>")
                     html_parts.append(df_weights.to_html(classes='table'))
+
+                    # === Добавляем таблицу с весами ===
+                    if 'list_weights' in metrics and metrics['list_weights']:
+                        list_weights = metrics['list_weights']
+                        expanded = []
+                        for item in list_weights:
+                            date = item['date']
+                            weights = item['weights']
+                            row = {'date': date}
+                            row.update({f"{coin}": w for coin, w in weights.items()})
+                            expanded.append(row)
+                        df_list_weights = DataFrame(expanded).set_index('date')
+                        if not df_list_weights.empty:
+                            html_parts.append('<h3>📋 Подробные веса по активам</h3>')
+                            html_parts.append(df_list_weights.to_html(classes='table', float_format="%.6f"))
 
             # === Проверка цен и объёмов ===
             for key in ['prices', 'volumes']:
