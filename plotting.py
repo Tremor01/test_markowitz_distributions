@@ -16,14 +16,13 @@ plots_dir = os.path.join(current_dir, "portfolio_plots")
 os.makedirs(plots_dir, exist_ok=True)
 
 
-def plot_metrics(strategies, file_name: str, reports: dict = None):
+def plot_metrics(strategies, file_name: str):
     metric_names = [metric for metric in Metrics]
 
     # Определяем начальные specs: по одному subplot на метрику + 1 для таблицы весов + 1 для таблицы отчетов
     specs = [[{"type": "table"}]]
     specs.extend([[{"type": "xy"}] for _ in range(len(metric_names))])
     specs.append([{"type": "table"}])  # Предпоследний subplot - таблица весов
-    specs.append([{"type": "table"}])  # Последний subplot - таблица отчетов
 
     # Создаем фигуру с графиками и таблицами
     fig = make_subplots(
@@ -104,98 +103,6 @@ def plot_metrics(strategies, file_name: str, reports: dict = None):
             xanchor="left",
             yanchor="top"
         ))
-
-    # --- Таблица весов ---
-    table_data = []
-    for strategy in strategies:
-        for idx, weights_dict in enumerate(strategy.weights_history):
-            non_zero_weights = {
-                coin: f"{weight:.2%}"
-                for coin, weight in weights_dict.items()
-                if abs(weight) > 1e-4
-            }
-
-            assets_str = f"{strategy.rebalancing_dates[idx]}<br>" + "<br>".join([
-                f"{coin}: {weight}" for coin, weight in non_zero_weights.items()
-            ])
-
-            table_data.append({"name": strategy.name, "color": strategy.color, "assets": assets_str})
-
-    df_weights = pd.DataFrame(table_data)
-
-    fig.add_trace(
-        go.Table(
-            header=dict(
-                values=["<b>Стратегия</b>", "<b>Активы (вес)</b>"],
-                font=dict(size=12, family="Arial Black"),
-                fill_color="lightgrey",
-            ),
-            cells=dict(
-                values=[df_weights["name"], df_weights["assets"]],
-                font=dict(size=11, family="Arial", weight="bold"),
-                fill_color=[
-                    df_weights["color"].tolist(),
-                    ["white"] * len(df_weights)
-                ],
-                line_color="darkslategray",
-                align="left",
-                height=30
-            ),
-        ),
-        row=len(specs) - 1, col=1  # Предпоследняя строка
-    )
-
-    # --- Таблица отчетов ---
-    if reports is not None:
-        report_data = []
-        for strategy in strategies:
-            if strategy.name in reports:
-                strategy_reports = reports[strategy.name]  # Это список словарей
-
-                # Обрабатываем каждый отчет в списке
-                reports_str = []
-                for report in strategy_reports:
-                    # Форматируем значения каждого отчета
-                    formatted_report = {
-                        k: f"{v:.2f}" if isinstance(v, (int, float)) else str(v)
-                        for k, v in report.items()
-                    }
-                    report_str = "<br>".join([f"{k}: {v}" for k, v in formatted_report.items()])
-                    reports_str.append(report_str)
-
-                # Объединяем все отчеты для стратегии с разделителем
-                combined_reports = "<br><br>".join(reports_str)
-
-                report_data.append({
-                    "name": strategy.name,
-                    "color": strategy.color,
-                    "report": combined_reports
-                })
-
-        if report_data:  # Добавляем таблицу только если есть данные
-            df_reports = pd.DataFrame(report_data)
-
-            fig.add_trace(
-                go.Table(
-                    header=dict(
-                        values=["<b>Стратегия</b>", "<b>Отчет</b>"],
-                        font=dict(size=12, family="Arial Black"),
-                        fill_color="lightgrey",
-                    ),
-                    cells=dict(
-                        values=[df_reports["name"], df_reports["report"]],
-                        font=dict(size=11, family="Arial", weight="bold"),
-                        fill_color=[
-                            df_reports["color"].tolist(),
-                            ["white"] * len(df_reports)
-                        ],
-                        line_color="darkslategray",
-                        align="left",
-                        height=30
-                    ),
-                ),
-                row=len(specs), col=1  # Последняя строка
-            )
 
     # --- Обновляем layout ---
     fig.update_layout(
@@ -457,7 +364,7 @@ def get_html_of_legend_sacle(strategies, inner_html, trace_meta_json, metric_nam
                     controls.innerHTML = `
                         <label>Metric:
                             <select id="metric-select">
-                                ${{metrics.map((m,i) => `<option value="${{i+1}}">${{m}}</option>`).join('')}}
+                                ${{metrics.map((m,i) => `<option value="${{i+2}}">${{m}}</option>`).join('')}}
                             </select>
                         </label>
                         <label>Strategy:
