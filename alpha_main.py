@@ -38,6 +38,37 @@ def main():
         simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
         print(time.time() - t)
 
+    # for a in range(0, 101, 10):
+    #     a /= 100
+    #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
+    #     s = [
+    #         ([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
+    #     ]
+    #
+    #     for strategies, train_period, step in s:
+    #         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+    #         t = time.time()
+    #         simulate(
+    #             deepcopy(strategies), file_name, train_period, step,
+    #             prices, volumes, f'report_alpha_{a * 100}_{int(100 - a * 100)}.html', plot=True
+    #         )
+    #         print(time.time() - t)
+
+    # for rf in range(0, 6):
+    #     rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
+    #     s = [
+    #         ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
+    #     ]
+    #
+    #     for strategies, train_period, step in s:
+    #         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+    #         t = time.time()
+    #         simulate(
+    #             deepcopy(strategies), file_name, train_period, step,
+    #             prices, volumes, f'report_rf_{rf}.html', plot=True
+    #         )
+    #         print(time.time() - t)
+
 
 def simulate(
         strategies: list[Strategy],
@@ -47,8 +78,12 @@ def simulate(
         prices:  pd.DataFrame,
         volumes: pd.DataFrame,
         start_period: int = 0,
+        report_name: str | None = None,
         plot: bool = True
 ):
+    if report_name is None:
+        report_name = f'Report{strategies[0].name}{train_period}_{step}_{START_CAPITAL}.html'
+
     if len(prices) < start_period: return
 
     left = 0; right = train_period
@@ -75,7 +110,7 @@ def simulate(
         right += step; left += step
 
     builder = ReportBuilder(prices, volumes, strategies)
-    builder.build_report()
+    builder.build_report(report_name)
 
     if plot: plot_metrics(strategies, file_name)
 
