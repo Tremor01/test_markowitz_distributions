@@ -53,7 +53,7 @@ def get_base_portfolio(
         train: DataFrame,
         min_weights: float,
         short: bool = False,
-        uppersht: float = 1,
+        uppersht: float = 0,
         budgetsht: float = 1,
 ) -> Portfolio:
     assets = train.columns

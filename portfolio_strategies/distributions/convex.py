@@ -9,7 +9,7 @@ from pandas import DataFrame, Series
 
 from .utils import (
     calculate_ledoit_wolf_covariance_matrix,
-    calculate_returns, calculate_log_returns, \
+    calculate_pct_returns, calculate_log_returns, \
     calculate_simple_covariance_matrix
 )
 
@@ -21,7 +21,7 @@ class RiskType(StrEnum):
 
 
 def get_expected_returns(prices: DataFrame):
-    returns = calculate_returns(prices)
+    returns = calculate_pct_returns(prices)
     expected_returns = returns.mean() * 365
     return expected_returns
 
@@ -34,7 +34,7 @@ def get_std_risk(data: DataFrame, weights: cp.Variable):
 
 
 def get_ledoit_wolf_risk(data: DataFrame, weights: cp.Variable, psd: bool = False):
-    returns = calculate_returns(data)
+    returns = calculate_pct_returns(data)
     risk = calculate_ledoit_wolf_covariance_matrix(returns)
 
     if psd: risk = cp.psd_wrap(risk)

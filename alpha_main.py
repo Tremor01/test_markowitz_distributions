@@ -4,7 +4,7 @@ import pandas as pd
 from plotting import plot_metrics
 
 from portfolio_strategies.constants import START_CAPITAL
-from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy
+from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy, ConvexMarkowitzSharpAlpha
 from data import get_prices, get_volumes
 from checkers import ReportBuilder
 
@@ -30,8 +30,8 @@ def main():
     train, test = 30, 7
 
     prices, volumes = free_tests()
-
-    s = [(deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
+    alpha_strat = ConvexMarkowitzSharpAlpha(1)
+    s = [([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
     for strategies, train_period, step in s:
         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
         t = time.time()
@@ -77,14 +77,11 @@ def simulate(
         step: int,
         prices:  pd.DataFrame,
         volumes: pd.DataFrame,
-        start_period: int = 0,
         report_name: str | None = None,
         plot: bool = True
 ):
     if report_name is None:
         report_name = f'Report{strategies[0].name}{train_period}_{step}_{START_CAPITAL}.html'
-
-    if len(prices) < start_period: return
 
     left = 0; right = train_period
     for _ in range(len(prices) // step - 1):

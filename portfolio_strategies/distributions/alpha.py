@@ -11,8 +11,9 @@ from pandas import DataFrame, Series
 
 from .utils import (
     calculate_ledoit_wolf_covariance_matrix,
-    calculate_returns, calculate_log_returns, \
-    calculate_simple_covariance_matrix
+    calculate_pct_returns, calculate_log_returns, \
+    calculate_simple_covariance_matrix,
+    calculate_correlation_matrix
 )
 
 
@@ -20,27 +21,36 @@ class RiskType(StrEnum):
     STD = "std"
     DRAWDOWN = "drawdown"
     LEDOIT_WOLF = "ledoit_wolf"
+    CORRELATION = "correlation"
+
+def get_ema_returns(prices: DataFrame) -> pd.Series:
+    returns = calculate_pct_returns(prices)
+    expected_returns = returns.ewm(span=returns.shape[0]).mean().iloc[-1]
+    return expected_returns
 
 def get_expected_median_returns(prices: DataFrame) -> pd.Series:
-    log_returns = calculate_log_returns(prices)
-    expected_returns = log_returns.median() * 10
+    returns = calculate_log_returns(prices)
+    expected_returns = returns.median() * 10
     return expected_returns
 
 def get_expected_returns(prices: DataFrame):
-    returns = calculate_returns(prices)
+    returns = calculate_pct_returns(prices)
     expected_returns = returns.mean() * 365
     return expected_returns
 
+def get_corr_risk(data: DataFrame, weights: cp.Variable):
+    returns = calculate_pct_returns(data)
+    risk = calculate_correlation_matrix(returns)
+    return weights.T @ risk @ weights
 
 def get_std_risk(data: DataFrame, weights: cp.Variable):
-    log_returns = calculate_log_returns(data)
-    risk = calculate_simple_covariance_matrix(log_returns)
-    goal_func = weights.T @ risk @ weights
-    return goal_func
+    returns = calculate_log_returns(data)
+    risk = calculate_simple_covariance_matrix(returns)
+    return weights.T @ risk @ weights
 
 
 def get_ledoit_wolf_risk(data: DataFrame, weights: cp.Variable, psd: bool = False):
-    returns = calculate_returns(data)
+    returns = calculate_pct_returns(data)
     risk = calculate_ledoit_wolf_covariance_matrix(returns)
 
     if psd: risk = cp.psd_wrap(risk)
@@ -51,7 +61,8 @@ def get_ledoit_wolf_risk(data: DataFrame, weights: cp.Variable, psd: bool = Fals
 
 RISK_FUNC = {
     RiskType.STD: get_std_risk,
-    RiskType.LEDOIT_WOLF: get_ledoit_wolf_risk
+    RiskType.LEDOIT_WOLF: get_ledoit_wolf_risk,
+    RiskType.CORRELATION: get_corr_risk,
 }
 
 
@@ -98,7 +109,7 @@ def alpha_sharp(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: flo
 def alpha_sharp_brute_force(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0) -> dict[str, float]:
     min_risk_ = float('inf')
     weights = {}
-    returns = calculate_returns(prices)
+    returns = calculate_pct_returns(prices)
     risk = calculate_ledoit_wolf_covariance_matrix(returns)
     col = returns.columns
     for a in range(0, 101, 10):
@@ -208,7 +219,7 @@ def maximize_profit(
 
 def sharp_ratio(
         data: DataFrame,
-        risk_type: RiskType = RiskType.LEDOIT_WOLF,
+        risk_type: RiskType = RiskType.CORRELATION,
         min_weights: float = 0.0,
         risk_free_rate: float = 0.0,
         smearing_coefficient: float = 0.0,
@@ -216,11 +227,11 @@ def sharp_ratio(
         leverage: float = 1.0,
         psd: bool = False
 ) -> np.ndarray | None:
-    expected_returns = get_expected_median_returns(data)
+    expected_returns = get_ema_returns(data)
     num_assets = len(expected_returns)
     expected_returns_np = expected_returns.values
     weights = cp.Variable(num_assets)
-    portfolio_risk = RISK_FUNC[risk_type](data, weights, psd)
+    portfolio_risk = RISK_FUNC[risk_type](data, weights)
 
     k = cp.Variable((1, 1))
 
@@ -251,23 +262,23 @@ def sharp_ratio(
 
 def sharp_ratio_only_long(
         data: DataFrame,
-        risk_type: RiskType = RiskType.LEDOIT_WOLF,
+        risk_type: RiskType = RiskType.CORRELATION,
         min_weights: float = 0.0,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
         psd: bool = False
 ) -> np.ndarray | None:
-    expected_returns = get_expected_returns(data)
-    cols = data.columns
-    for col in cols:
-        i = data.columns.get_loc(col)
-        if expected_returns[i] < 0:
-            data.drop(col, axis=1)
-    expected_returns = get_expected_returns(data)
+    # expected_returns = get_ema_returns(data)
+    # cols = data.columns
+    # for col in cols:
+    #     i = data.columns.get_loc(col)
+    #     if expected_returns[i] < 0:
+    #         data.drop(col, axis=1)
+    expected_returns = get_ema_returns(data)
     num_assets = len(expected_returns)
     expected_returns_np = expected_returns.values
     weights = cp.Variable(num_assets)
-    portfolio_risk = RISK_FUNC[risk_type](data, weights, psd)
+    portfolio_risk = RISK_FUNC[risk_type](data, weights)
     k = cp.Variable((1, 1))
     objective = cp.Minimize(cp.abs(portfolio_risk))
     constraints = [
@@ -289,23 +300,23 @@ def sharp_ratio_only_long(
 
 def sharp_ratio_only_short(
         data: DataFrame,
-        risk_type: RiskType = RiskType.LEDOIT_WOLF,
+        risk_type: RiskType = RiskType.CORRELATION,
         min_weights: float = 0.0,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
         psd: bool = False
 ) -> np.ndarray | None:
-    expected_returns = get_expected_returns(data)
-    cols = data.columns
-    for col in cols:
-        i = data.columns.get_loc(col)
-        if expected_returns[i] > 0:
-            data.drop(col, axis=1)
-    expected_returns = get_expected_returns(data)
+    # expected_returns = get_ema_returns(data)
+    # cols = data.columns
+    # for col in cols:
+    #     i = data.columns.get_loc(col)
+    #     if expected_returns[i] > 0:
+    #         data.drop(col, axis=1)
+    expected_returns = get_ema_returns(data)
     num_assets = len(expected_returns.values)
     expected_returns_np = expected_returns.values
     weights = cp.Variable(num_assets)
-    portfolio_risk = RISK_FUNC[risk_type](data, weights, psd)
+    portfolio_risk = RISK_FUNC[risk_type](data, weights)
     k = cp.Variable((1, 1))
     objective = cp.Minimize(portfolio_risk)
     constraints = [
