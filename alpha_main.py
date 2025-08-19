@@ -27,7 +27,7 @@ def free_tests() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def main():
-    train, test = 30, 7
+    train, test = 8, 3
 
     prices, volumes = free_tests()
     # alpha_strat = ConvexMarkowitzSharpAlpha(1)
@@ -38,7 +38,7 @@ def main():
     #     simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
     #     print(time.time() - t)
 
-    # for a in range(0, 101, 10):
+    # for a in range(80, 81):
     #     a /= 100
     #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
     #     s = [
@@ -54,7 +54,7 @@ def main():
     #         )
     #         print(time.time() - t)
 
-    for rf in range(0, 6):
+    for rf in range(0, 1):
         rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
         s = [
             ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
