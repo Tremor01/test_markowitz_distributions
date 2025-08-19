@@ -9,6 +9,8 @@ import pandas as pd
 
 from portfolio_strategies import StrategyBTC, MIN_RISK, MAX_RET, SHARP, SHARP_SHORT
 from portfolio_strategies.main_strategy import Metrics
+from pathlib import Path
+from shared import get_unique_filepath
 
 
 current_dir = os.path.dirname(__file__)
@@ -135,7 +137,7 @@ def plot_metrics(strategies, file_name: str):
     full_html = get_html_of_legend_sacle(strategies, inner_html, trace_meta_json, metric_names_json,
                                          strategy_names_json)
 
-    with open(filepath, "w", encoding="utf-8") as f:
+    with open(get_unique_filepath(filepath), "w", encoding="utf-8") as f:
         f.write(full_html)
 
     return fig

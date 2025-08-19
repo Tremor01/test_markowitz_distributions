@@ -5,6 +5,7 @@ from portfolio_strategies import Strategy
 from portfolio_strategies.constants import Metrics, FEE_RATE, START_CAPITAL, VOLUME_PERCENT, MIN_INVEST
 import os
 
+from shared import get_unique_filepath
 
 current_file = Path(__file__)
 parent_dir = current_file.parent.parent
@@ -77,13 +78,13 @@ class ReportBuilder:
 
             self._report[strategy.name]['stats_weights'].append({
                 'date': date,
-                'sum_weights': sum_,
-                'sum_positive': sum_plus,
-                'sum_negative': sum_mines,
+                'sum': sum_,
+                'sum_pos': sum_plus,
+                'sum_neg': sum_mines,
                 'min_weight': cur_min,
                 'capital': capital,
-                'min_weight_in_cash': cur_min * capital,
-                'greater_then_daily_volume': daily_volume,
+                '$ min_weight': cur_min * capital,
+                '> daily_volume': daily_volume,
             })
             self._report[strategy.name]['list_weights'].append(
                 {'date': date, 'weights': weights}
@@ -146,8 +147,9 @@ class ReportBuilder:
             cnt_incorrect += abs(month_ret - real_ret) > 1e-10
             
             pairs_returns.append({
-                'returns_percent': month_ret,
-                'check_percent': real_ret,
+                'date': end_date,
+                'returns_percent': month_ret * 100,
+                'check_percent': real_ret * 100,
                 'abs_delta_returns': abs(real_ret - month_ret)
             })
         
@@ -258,6 +260,9 @@ class ReportBuilder:
                 background-color: #3498db;
                 color: white;
                 font-weight: bold;
+                position: sticky;
+                top: 0;
+                z-index: 10;
             }
             tr:nth-child(even) {
                 background-color: #f2f7fb;
@@ -288,6 +293,25 @@ class ReportBuilder:
                 color: #7f8c8d;
                 font-size: 0.9em;
             }
+            .table-container {
+                max-height: 600px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                margin: 20px 0;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            }
+            .table-container table {
+                margin: 0;
+                box-shadow: none;
+            }
+            .table-container thead th {
+                position: sticky;
+                top: 0;
+                background-color: #3498db;
+                color: white;
+                z-index: 100;
+            }
         </style>
         """
 
@@ -303,40 +327,23 @@ class ReportBuilder:
                 cw = metrics['change_weights']
                 html_parts.append('<h3>🔄 Изменения весов</h3>')
                 html_parts.append('<ul>')
-                html_parts.append(f"<li><b>Меняли минимальный вес:</b> {f'❌ Да {cw['min_w']} раз' if cw['min_w'] else '✅ Нет'}</li>")
+                html_parts.append(
+                    f"<li><b>Меняли минимальный вес:</b> {f'❌ Да {cw['min_w']} раз' if cw['min_w'] else '✅ Нет'}</li>")
                 html_parts.append(
                     f"<li><b>Был ли вес больше 10% от дневного объёма:</b> {f'❌ Да {cw['volume_percent']} раз' if cw['volume_percent'] else '✅ Нет'}</li>")
-                html_parts.append(f"<li><b>Нормализовывали ли веса:</b> {f'❌ Да {cw['normalize']} раз' if cw['normalize'] else '✅ Нет'}</li>")
+                html_parts.append(
+                    f"<li><b>Нормализовывали ли веса:</b> {f'❌ Да {cw['normalize']} раз' if cw['normalize'] else '✅ Нет'}</li>")
                 html_parts.append('</ul>')
 
-            # === Проверка весов ===
-            if 'stats_weights' in metrics:
-                df_weights = DataFrame(metrics['stats_weights'])
-                cw = metrics['correct_weights']
-                if not df_weights.empty:
-                    df_weights = df_weights.set_index('date')
-                    html_parts.append('<h3>📉 Веса портфеля</h3>')
-                    html_parts.append(f"<li><b>Сумма весов больше единицы:</b> {f'❌ Да {cw['sum']} раз' if cw['sum'] else '✅ Нет'}</li>")
-                    html_parts.append(f"<li><b>Минимальный вес меньше {self._min_invest}$:</b> {f'❌ Да {cw['min_w']} раз' if cw['min_w'] else '✅ Нет'}</li>")
-                    html_parts.append(f"<li><b>Вес больше чем {self._volume_percent}% дневного объёма:</b> {f'❌ Да {cw['daily_volume']} раз' if cw['daily_volume'] else '✅ Нет'}</li>")
-                    html_parts.append(df_weights.to_html(classes='table'))
+            cw = metrics['correct_weights']
+            html_parts.append('<h3>🔍 Контрольные значения</h3>')
+            html_parts.append(
+                f"<li><b>Сумма весов больше единицы:</b> {f'❌ Да {cw['sum']} раз' if cw['sum'] else '✅ Нет'}</li>")
+            html_parts.append(
+                f"<li><b>Минимальный вес меньше {self._min_invest}$:</b> {f'❌ Да {cw['min_w']} раз' if cw['min_w'] else '✅ Нет'}</li>")
+            html_parts.append(
+                f"<li><b>Вес больше чем {self._volume_percent}% дневного объёма:</b> {f'❌ Да {cw['daily_volume']} раз' if cw['daily_volume'] else '✅ Нет'}</li>")
 
-                    # === Добавляем таблицу с весами ===
-                    if 'list_weights' in metrics and metrics['list_weights']:
-                        list_weights = metrics['list_weights']
-                        expanded = []
-                        for item in list_weights:
-                            date = item['date']
-                            weights = item['weights']
-                            row = {'date': date}
-                            row.update({f"{coin}": w for coin, w in weights.items()})
-                            expanded.append(row)
-                        df_list_weights = DataFrame(expanded).set_index('date')
-                        if not df_list_weights.empty:
-                            html_parts.append('<h3>📋 Подробные веса по активам</h3>')
-                            html_parts.append(df_list_weights.to_html(classes='table', float_format="%.6f"))
-
-            # === Проверка цен и объёмов ===
             for key in ['prices', 'volumes']:
                 if key in metrics:
                     is_correct = metrics[key]['is_correct']
@@ -346,7 +353,6 @@ class ReportBuilder:
                     html_parts.append(
                         f'<div class="metric"><b>{key.title()}:</b> <span class="{color}">{status}</span></div>')
 
-            # === Проверка доходности ===
             if 'returns' in metrics:
                 ret = metrics['returns']
                 is_correct = ret['is_correct']
@@ -355,7 +361,6 @@ class ReportBuilder:
                 html_parts.append(
                     f'<div class="metric"><b>Проверка капитала:</b> <span class="{color}">{status}</span></div>')
 
-            # === Проверка доходности по парам ===
             if 'between_returns' in metrics:
                 br = metrics['between_returns']
                 is_correct = br['is_correct']
@@ -364,16 +369,38 @@ class ReportBuilder:
                 html_parts.append(
                     f'<div class="metric"><b>Месячная доходность:</b> <span class="{color}">{status}</span></div>')
 
-                if br.get('between_returns'):
+            df_weights = DataFrame(metrics['stats_weights'])
+            if not df_weights.empty:
+                df_weights = df_weights.set_index('date')
+
+                if 'list_weights' in metrics and metrics['list_weights']:
+                    list_weights = metrics['list_weights']
+                    expanded = []
+                    for item in list_weights:
+                        date = item['date']
+                        weights = item['weights']
+
+                        weights = {coin: w for coin, w in weights.items() if w != 0}
+                        weights = dict(sorted(weights.items(), key=lambda p: abs(p[1]), reverse=True))
+                        row = {'date': date, 'weights': weights}
+                        expanded.append(row)
+
+                    df_list_weights = DataFrame(expanded).set_index('date')
+                    df_weights = df_weights.join(df_list_weights, how='left')
+
+                if 'between_returns' in metrics and metrics['between_returns']:
+                    br = metrics['between_returns']
                     df_br = DataFrame(br['between_returns'])
                     if len(df_br) > 0:
-                        html_parts.append('<h3>🔍 Сравнение доходности (реальная vs. отчёт)</h3>')
-                        df_br_rounded = df_br.round(6)
-                        df_br_styled = (df_br_rounded
-                                        .style
-                                        .bar(subset=['abs_delta_returns'], color='#e74c3c')
-                                        .set_table_attributes('class="table"'))
-                        html_parts.append(df_br_styled.to_html())
+                        df_br = df_br.set_index('date')
+                        br_columns = [col for col in df_br.columns if col != 'date']
+                        df_weights = df_weights.join(df_br[br_columns], how='left')
+
+                # Обёртываем таблицу в контейнер с фиксированной шапкой
+                html_parts.append('<div class="table-container">')
+                df_weights = df_weights.reset_index()
+                html_parts.append(df_weights.to_html(classes='table'))
+                html_parts.append('</div>')  # конец контейнера таблицы
 
             html_parts.append('</div>')  # конец секции стратегии
 
@@ -382,5 +409,5 @@ class ReportBuilder:
         html_parts.append('</div></body></html>')
 
         full_html = ''.join(html_parts)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(get_unique_filepath(output_path), "w", encoding="utf-8") as f:
             f.write(full_html)
