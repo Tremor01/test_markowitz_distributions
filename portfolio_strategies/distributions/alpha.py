@@ -1,25 +1,114 @@
-from typing import Any
+from functools import partial
+from typing import Tuple, Any
 
 import numpy as np
 import cvxpy as cp
-from functools import partial
 
-from cvxpy import Variable
-from cvxpy.constraints import Inequality
-from pandas import DataFrame
+from enum import StrEnum
 
-from .constants import *
+import pandas as pd
+from cvxpy import psd_wrap
+from numpy import ndarray, dtype, float64
+from pandas import DataFrame, Series
+
 from .utils import (
-    calculate_pct_returns, get_ema_returns, calculate_correlation_matrix
+    calculate_ledoit_wolf_covariance_matrix,
+    calculate_pct_returns, calculate_log_returns, \
+    calculate_simple_covariance_matrix,
+    calculate_correlation_matrix
 )
 
 
-def alpha_sharp_brute_force(
-        prices: DataFrame,
-        min_weights: float = 0.0,
-        max_weights: dict[str, float] | None = None,
-        risk_free_rate: float = 0.0
-) -> dict[str, float]:
+class RiskType(StrEnum):
+    STD = "std"
+    DRAWDOWN = "drawdown"
+    LEDOIT_WOLF = "ledoit_wolf"
+    CORRELATION = "correlation"
+
+def get_ema_returns(prices: DataFrame) -> pd.Series:
+    returns = calculate_pct_returns(prices)
+    expected_returns = returns.ewm(span=returns.shape[0]).mean().iloc[-1]
+    return expected_returns
+
+def get_expected_median_returns(prices: DataFrame) -> pd.Series:
+    returns = calculate_log_returns(prices)
+    expected_returns = returns.median() * 10
+    return expected_returns
+
+def get_expected_returns(prices: DataFrame):
+    returns = calculate_pct_returns(prices)
+    expected_returns = returns.mean() * 365
+    return expected_returns
+
+def get_corr_risk(data: DataFrame, weights):
+    returns = calculate_pct_returns(data)
+    risk = calculate_correlation_matrix(returns)
+    return weights.T @ risk @ weights
+
+def get_std_risk(data: DataFrame, weights):
+    returns = calculate_log_returns(data)
+    risk = calculate_simple_covariance_matrix(returns)
+    return weights.T @ risk @ weights
+
+
+def get_ledoit_wolf_risk(data: DataFrame, weights: cp.Variable, psd: bool = False):
+    returns = calculate_pct_returns(data)
+    risk = calculate_ledoit_wolf_covariance_matrix(returns)
+
+    if psd: risk = cp.psd_wrap(risk)
+
+    goal_func = cp.quad_form(weights, risk)
+    return goal_func
+
+
+RISK_FUNC = {
+    RiskType.STD: get_std_risk,
+    RiskType.LEDOIT_WOLF: get_ledoit_wolf_risk,
+    RiskType.CORRELATION: get_corr_risk,
+}
+
+
+def min_risk(prices: DataFrame, min_weights: float = 0.0) -> dict[str, float]:
+    weights = optimize(prices, partial(minimize_risk, min_weights=min_weights))
+    if weights is None:
+        weights = optimize(prices, partial(minimize_risk, min_weights=min_weights, psd=True))
+    return weights
+
+
+def max_profit(prices: DataFrame, min_weights: float = 0.0) -> dict[str, float]:
+    weights = optimize(prices, partial(maximize_profit, min_weights=min_weights))
+    if weights is None:
+        weights = optimize(prices, partial(maximize_profit, min_weights=0))
+    return weights
+
+
+def sharp(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0, short: bool = False) -> dict[str, float]:
+    weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, is_short=short, risk_free_rate=risk_free_rate))
+    if weights is None:
+        weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, is_short=short, risk_free_rate=risk_free_rate, psd=True))
+    if weights is None:
+        weights = optimize(prices, partial(sharp_ratio, min_weights=0, is_short=short, risk_free_rate=risk_free_rate))
+    if weights is None:
+        weights = optimize(prices, partial(sharp_ratio, min_weights=0, is_short=short, risk_free_rate=risk_free_rate, psd=True))
+    return weights
+
+def alpha_sharp(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0, a: float = 0.5) -> dict[str, float]:
+    min_weights_long = min_weights if a == 0 else min_weights / a
+    min_weights_short = min_weights if (1 - a) == 0 else min_weights / (1 - a)
+    weights_long = optimize(prices, partial(sharp_ratio_only_long, min_weights=min_weights_long, risk_free_rate=risk_free_rate))
+    weights_short = optimize(prices, partial(sharp_ratio_only_short, min_weights=min_weights_short, risk_free_rate=risk_free_rate))
+    if weights_short is None or weights_long is None:
+        return {}
+    weights = {}
+    for k in weights_long:
+        weights[k] = weights_long[k] * a
+    for k in weights_short:
+        if k not in weights:
+            weights[k] = 0
+        weights[k] += weights_short[k] * (1 - a)
+    return weights
+
+def alpha_sharp_brute_force(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0) -> dict[str, float]:
     max_sharp = -float('inf')
     weights = {}
     col = calculate_pct_returns(prices).columns
@@ -27,7 +116,7 @@ def alpha_sharp_brute_force(
     returns_pct = calculate_pct_returns(prices)
     risk = calculate_correlation_matrix(returns_pct)
     for a in range(0, 101, 10):
-        temp_weights = alpha_sharp(prices, min_weights, max_weights, risk_free_rate, a)
+        temp_weights = alpha_sharp(prices, min_weights, risk_free_rate, a)
         if len(temp_weights) == 0:
             continue
         array_weights = [temp_weights[key] for key in col]
@@ -52,39 +141,141 @@ def optimize(prices: DataFrame, type_optimization) -> dict[str, float] | None:
     return allocation
 
 
-def alpha_sharp(
-        prices: DataFrame,
+def minimize_risk(
+        data: DataFrame,
+        risk_type: RiskType = RiskType.LEDOIT_WOLF,
         min_weights: float = 0.0,
-        max_weights: dict[str, float] | None = None,
-        risk_free_rate: float = 0.0,
-        a: float = 0.5
-) -> dict[str, float]:
-    min_weights_long = min_weights if a == 0 else min_weights / a
-    min_weights_short = min_weights if (1 - a) == 0 else min_weights / (1 - a)
-    weights_long = optimize(prices, partial(sharp_ratio_only_long, min_weights=min_weights_long, max_weights=max_weights, risk_free_rate=risk_free_rate))
-    weights_short = optimize(prices, partial(sharp_ratio_only_short, min_weights=min_weights_short, max_weights=max_weights, risk_free_rate=risk_free_rate))
-    if weights_short is None or weights_long is None:
-        return {}
-    weights = {}
-    for k in weights_long:
-        weights[k] = weights_long[k] * a
-    for k in weights_short:
-        if k not in weights:
-            weights[k] = 0
-        weights[k] += weights_short[k] * (1 - a)
-    return weights
+        smearing_coefficient: float = 0.0,
+        is_short: bool = False,
+        leverage: float = 1.0,
+        psd: bool = False
+) -> np.ndarray | None:
+    expected_returns = get_expected_returns(data)
+    num_assets = len(expected_returns)
 
+    weights = cp.Variable(num_assets)
+    portfolio_risk = RISK_FUNC[risk_type](data, weights, psd)
+    k = cp.Variable()
+    objective = cp.Minimize(portfolio_risk + cp.sum_squares(weights) * smearing_coefficient)
+
+    constraints = [
+        cp.sum(cp.pos(weights)) + cp.sum(cp.neg(weights)) <= k * leverage,
+        k >= 0,
+    ]
+    if not is_short:
+        constraints += [weights >= min_weights, ]
+
+    problem = cp.Problem(objective, constraints)  # type: ignore
+    for solver in cp.installed_solvers():
+        try:
+            problem.solve(solver=solver)
+        except Exception as e:
+            pass
+        if weights.value is not None: break
+
+    if weights.value is None: return None
+
+    weights = np.array(weights.value, ndmin=2).T
+    return weights #type: ignore
+
+
+def maximize_profit(
+        data: DataFrame,
+        risk_type: RiskType = RiskType.LEDOIT_WOLF,
+        min_weights: float = 0.0,
+        smearing_coefficient: float = 0.0,
+        is_short: bool = False,
+        leverage: float = 1.0,
+        psd: bool = False
+) -> np.ndarray | None:
+    expected_returns = get_expected_returns(data)
+    num_assets = len(expected_returns)
+    expected_returns_np = expected_returns.values
+    weights = cp.Variable(num_assets)
+    portfolio_return = expected_returns_np @ weights
+
+    k = cp.Variable()
+    objective = cp.Minimize(-portfolio_return + cp.sum_squares(weights) * smearing_coefficient)
+    constraints = [
+        cp.sum(cp.pos(weights)) + cp.sum(cp.neg(weights)) <= k * leverage,
+        k >= 0,
+    ]
+
+    if not is_short:
+        constraints += [weights >= min_weights, k == 1,]
+
+    problem = cp.Problem(objective, constraints)  # type: ignore
+    for solver in cp.installed_solvers():
+        try:
+            problem.solve(solver=solver)
+            if weights.value: break
+        except Exception as e:
+            pass
+
+    if weights.value is None: return None
+
+    weights = np.array(weights.value, ndmin=2).T
+    return weights #type: ignore
+
+
+def sharp_ratio(
+        data: DataFrame,
+        risk_type: RiskType = RiskType.LEDOIT_WOLF,
+        min_weights: float = 0.0,
+        risk_free_rate: float = 0.0,
+        smearing_coefficient: float = 0.0,
+        is_short: bool = False,
+        leverage: float = 1.0,
+        psd: bool = False
+) -> np.ndarray | None:
+    expected_returns = get_ema_returns(data)
+    num_assets = len(expected_returns)
+    expected_returns_np = expected_returns.values
+    weights = cp.Variable(num_assets)
+    portfolio_risk = RISK_FUNC[risk_type](data, weights)
+
+    k = cp.Variable((1, 1))
+
+    objective = cp.Minimize(portfolio_risk + cp.sum_squares(weights) * smearing_coefficient)
+    constraints = [
+        expected_returns_np @ weights - risk_free_rate * k == 1,  # type: ignore
+        cp.sum(cp.pos(weights)) + cp.sum(cp.neg(weights)) <= k * leverage,
+        cp.abs(weights) <= k * leverage,
+        k >= 0,
+    ]
+    if not is_short:
+        constraints += [weights >= min_weights * k]
+    # else:
+    #     constraints += [cp.abs(weights) >= min_weights * k]
+
+    problem = cp.Problem(objective, constraints)
+    for solver in cp.installed_solvers():
+        try:
+            problem.solve(solver=solver)
+            if weights.value: break
+        except Exception as e:
+            pass
+
+    if weights.value is None: return None
+
+    weights = np.array(weights.value / k.value, ndmin=2).T  # type: ignore
+    return weights # type: ignore
 
 def sharp_ratio_only_long(
         data: DataFrame,
         risk_type: RiskType = RiskType.LEDOIT_WOLF,
-        returns_type: ReturnsType = ReturnsType.EMA,
         min_weights: float = 0.0,
-        max_weights: dict[str, float] | None = None,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
+        psd: bool = False
 ) -> np.ndarray | None:
-    expected_returns = RETURNS_FUNC[returns_type](data)
+    # expected_returns = get_ema_returns(data)
+    # cols = data.columns
+    # for col in cols:
+    #     i = data.columns.get_loc(col)
+    #     if expected_returns[i] < 0:
+    #         data.drop(col, axis=1)
+    expected_returns = get_ema_returns(data)
     num_assets = len(expected_returns)
     expected_returns_np = expected_returns.values
     weights = cp.Variable(num_assets)
@@ -97,9 +288,6 @@ def sharp_ratio_only_long(
         k >= 0,
         weights >= min_weights*k,
     ]
-    if max_weights is not None:
-        constraints += get_max_weights_constraints(data, max_weights, weights, k)
-
     problem = cp.Problem(objective, constraints)
     for solver in cp.installed_solvers():
         try:
@@ -111,18 +299,21 @@ def sharp_ratio_only_long(
     weights = np.array(weights.value / k.value, ndmin=2).T  # type: ignore
     return weights # type: ignore
 
-
 def sharp_ratio_only_short(
         data: DataFrame,
         risk_type: RiskType = RiskType.LEDOIT_WOLF,
-        returns_type: ReturnsType = ReturnsType.EMA,
         min_weights: float = 0.0,
-        max_weights: dict[str, float] | None = None,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
         psd: bool = False
 ) -> np.ndarray | None:
-    expected_returns = RETURNS_FUNC[returns_type](data)
+    # expected_returns = get_ema_returns(data)
+    # cols = data.columns
+    # for col in cols:
+    #     i = data.columns.get_loc(col)
+    #     if expected_returns[i] > 0:
+    #         data.drop(col, axis=1)
+    expected_returns = get_ema_returns(data)
     num_assets = len(expected_returns.values)
     expected_returns_np = expected_returns.values
     weights = cp.Variable(num_assets)
@@ -135,9 +326,6 @@ def sharp_ratio_only_short(
         k >= 0,
         weights <= -min_weights*k,
     ]
-    if max_weights is not None:
-        constraints += get_max_weights_constraints(data, max_weights, weights, k, is_short=True)
-
     problem = cp.Problem(objective, constraints)
     for solver in cp.installed_solvers():
         try:
@@ -147,25 +335,3 @@ def sharp_ratio_only_short(
             pass
     if weights.value is None: return None
     weights = np.array(weights.value / k.value, ndmin=2).T  # type: ignore
-    return weights # type: ignore
-
-
-def get_max_weights_constraints(
-        data: DataFrame,
-        max_weights: dict[str, float],
-        weights: Variable,
-        k: Variable,
-        is_short: bool = False,
-) -> list[Inequality | Any]:
-    constraints = list()
-
-    columns = data.columns.tolist()
-    for coin, max_w in max_weights.items():
-        if coin in columns:
-            i = columns.index(coin)
-            if is_short:
-                constraints.append(weights[i] >= -max_w * k)
-            else:
-                constraints.append(weights[i] <=  max_w * k)
-
-    return constraints
