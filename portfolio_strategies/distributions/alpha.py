@@ -266,7 +266,7 @@ def sharp_ratio(
 
 def sharp_ratio_only_long(
         data: DataFrame,
-        risk_type: RiskType = RiskType.CORRELATION,
+        risk_type: RiskType = RiskType.LEDOIT_WOLF,
         min_weights: float = 0.0,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
@@ -304,7 +304,7 @@ def sharp_ratio_only_long(
 
 def sharp_ratio_only_short(
         data: DataFrame,
-        risk_type: RiskType = RiskType.CORRELATION,
+        risk_type: RiskType = RiskType.LEDOIT_WOLF,
         min_weights: float = 0.0,
         risk_free_rate: float = 0.0,
         leverage: float = 1.0,
