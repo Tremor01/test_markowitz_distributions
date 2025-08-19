@@ -4,7 +4,7 @@ import pandas as pd
 from plotting import plot_metrics
 
 from portfolio_strategies.constants import START_CAPITAL
-from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy, ConvexMarkowitzSharpAlpha
+from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy, ConvexMarkowitzSharpAlpha, ConvexMarkowitzSharpBruteForceRF
 from data import get_prices, get_volumes
 from checkers import ReportBuilder
 
@@ -30,13 +30,13 @@ def main():
     train, test = 30, 7
 
     prices, volumes = free_tests()
-    alpha_strat = ConvexMarkowitzSharpAlpha(1)
-    s = [([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
-    for strategies, train_period, step in s:
-        file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
-        t = time.time()
-        simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
-        print(time.time() - t)
+    # alpha_strat = ConvexMarkowitzSharpAlpha(1)
+    # s = [([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
+    # for strategies, train_period, step in s:
+    #     file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+    #     t = time.time()
+    #     simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
+    #     print(time.time() - t)
 
     # for a in range(0, 101, 10):
     #     a /= 100
@@ -54,20 +54,20 @@ def main():
     #         )
     #         print(time.time() - t)
 
-    # for rf in range(0, 6):
-    #     rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
-    #     s = [
-    #         ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-    #     ]
-    #
-    #     for strategies, train_period, step in s:
-    #         file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
-    #         t = time.time()
-    #         simulate(
-    #             deepcopy(strategies), file_name, train_period, step,
-    #             prices, volumes, f'report_rf_{rf}.html', plot=True
-    #         )
-    #         print(time.time() - t)
+    for rf in range(0, 6):
+        rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
+        s = [
+            ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
+        ]
+
+        for strategies, train_period, step in s:
+            file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+            t = time.time()
+            simulate(
+                deepcopy(strategies), file_name, train_period, step,
+                prices, volumes, f'report_rf_{rf}.html', plot=True
+            )
+            print(time.time() - t)
 
 
 def simulate(

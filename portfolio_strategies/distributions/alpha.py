@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Tuple, Any
 
 import numpy as np
 import cvxpy as cp
@@ -7,6 +8,7 @@ from enum import StrEnum
 
 import pandas as pd
 from cvxpy import psd_wrap
+from numpy import ndarray, dtype, float64
 from pandas import DataFrame, Series
 
 from .utils import (
@@ -38,12 +40,12 @@ def get_expected_returns(prices: DataFrame):
     expected_returns = returns.mean() * 365
     return expected_returns
 
-def get_corr_risk(data: DataFrame, weights: cp.Variable):
+def get_corr_risk(data: DataFrame, weights):
     returns = calculate_pct_returns(data)
     risk = calculate_correlation_matrix(returns)
     return weights.T @ risk @ weights
 
-def get_std_risk(data: DataFrame, weights: cp.Variable):
+def get_std_risk(data: DataFrame, weights):
     returns = calculate_log_returns(data)
     risk = calculate_simple_covariance_matrix(returns)
     return weights.T @ risk @ weights
@@ -107,22 +109,24 @@ def alpha_sharp(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: flo
     return weights
 
 def alpha_sharp_brute_force(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0) -> dict[str, float]:
-    min_risk_ = float('inf')
+    max_sharp = -float('inf')
     weights = {}
-    returns = calculate_pct_returns(prices)
-    risk = calculate_ledoit_wolf_covariance_matrix(returns)
-    col = returns.columns
+    col = calculate_pct_returns(prices).columns
+    returns = get_ema_returns(prices).values
+    returns_pct = calculate_pct_returns(prices)
+    risk = calculate_correlation_matrix(returns_pct)
     for a in range(0, 101, 10):
         temp_weights = alpha_sharp(prices, min_weights, risk_free_rate, a)
         if len(temp_weights) == 0:
             continue
         array_weights = [temp_weights[key] for key in col]
         np_array_weights = np.array(array_weights)
-        temp_risk = np_array_weights.T @ risk @ np_array_weights
-        if temp_risk < min_risk_:
-            min_risk_ = temp_risk
+        temp_sharp = (returns @ np_array_weights - risk_free_rate) / (np_array_weights.T @ risk @ np_array_weights)
+        if temp_sharp > max_sharp:
+            max_sharp = temp_sharp
             weights = temp_weights
-    return  weights
+        print(a, temp_sharp)
+    return weights
 
 
 
@@ -280,7 +284,7 @@ def sharp_ratio_only_long(
     weights = cp.Variable(num_assets)
     portfolio_risk = RISK_FUNC[risk_type](data, weights)
     k = cp.Variable((1, 1))
-    objective = cp.Minimize(cp.abs(portfolio_risk))
+    objective = cp.Minimize(portfolio_risk)
     constraints = [
         expected_returns_np @ weights - risk_free_rate * k == 1,  # type: ignore
         cp.sum(weights) <= k * leverage,
