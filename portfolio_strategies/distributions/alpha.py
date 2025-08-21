@@ -24,7 +24,7 @@ def alpha_sharp_brute_force(
     max_sharp = -float('inf')
     weights = dict()
 
-    alpha = 0; span = 0
+    alpha = 0; sp = 0
 
     for span in range(0, 11):
         col = calculate_pct_returns(prices).columns
@@ -43,8 +43,8 @@ def alpha_sharp_brute_force(
             if temp_sharp > max_sharp:
                 max_sharp = temp_sharp
                 weights = temp_weights
-                alpha = a
-        return weights, alpha, span
+                alpha = a; sp = span
+    return weights, alpha, sp
 
 
 def optimize(prices: DataFrame, type_optimization) -> dict[str, float] | None:
