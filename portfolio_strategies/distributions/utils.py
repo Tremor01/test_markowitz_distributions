@@ -40,9 +40,9 @@ def calculate_log_returns(data: DataFrame) -> DataFrame:
 def calculate_pct_returns(data: DataFrame) -> DataFrame:
     return data.pct_change().dropna()
 
-def get_ema_returns(prices: DataFrame) -> Series:
+def get_ema_returns(prices: DataFrame, span: float = 10) -> Series:
     returns = calculate_pct_returns(prices)
-    expected_returns = returns.ewm(span=returns.shape[0]).mean().iloc[-1]
+    expected_returns = returns.ewm(span=span).mean().iloc[-1]
     return expected_returns
 
 def get_expected_median_returns(prices: DataFrame) -> Series:

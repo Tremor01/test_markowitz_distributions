@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 from pandas import DataFrame
@@ -52,7 +53,7 @@ class ReportBuilder:
         self._report[strategy.name]['stats_weights'] = list()
         self._report[strategy.name]['list_weights'] = list()
 
-        sum_of_weights = min_weights = daily_volume = 0
+        chk_sum_of_weights = chk_min_weights = daily_volume = 0
         for date in strategy.rebalancing_dates:
             fmin_w, fvolume_percent, fnormalize = self._check_weights_change(strategy.data_for_report['weights'][date])
             min_w += fmin_w; volume_percent += fvolume_percent; normalize += fnormalize
@@ -73,26 +74,29 @@ class ReportBuilder:
             sum_plus  = sum([w for _, w in weights.items() if w > 0])
             sum_mines = sum([w for _, w in weights.items() if w < 0])
 
-            sum_of_weights += (sum_ - 1 > 1e-6)
-            min_weights += (cur_min * capital < self._min_invest - 1e-3 and cur_min != 0)
+            chk_sum_of_weights += (sum_ - 1 > 1e-6)
+            chk_min_weights += (cur_min * capital < self._min_invest - 1e-3 and cur_min != 0)
 
             self._report[strategy.name]['stats_weights'].append({
                 'date': date,
-                'sum': sum_,
-                'sum_pos': sum_plus,
-                'sum_neg': sum_mines,
-                'min_weight': cur_min,
-                'capital': capital,
-                '$ min_weight': cur_min * capital,
-                '> daily_volume': daily_volume,
+                'sum': self._round(sum_),
+                'sum_pos': self._round(sum_plus),
+                'sum_neg': self._round(sum_mines),
+                'min_weight': self._round(cur_min),
+                'capital': self._round(capital),
+                '$ min_weight': self._round(cur_min * capital),
+                '> daily_volume': self._round(daily_volume),
+                'alpha': strategy.data_for_report['alpha'][date],
+                'span': strategy.data_for_report['span'][date]
             })
-            self._report[strategy.name]['list_weights'].append(
-                {'date': date, 'weights': weights}
-            )
+
+            weights = dict(sorted(weights.items(), key=lambda p: abs(p[1]), reverse=True))
+            str_weights = ', '.join([f"{coin}: {w * 100:.5f}" for coin, w in weights.items() if f'{w * 100:.5f}' != '0.00000'])
+            self._report[strategy.name]['list_weights'].append({'date': date, 'weights': str_weights})
 
         self._report[strategy.name]['correct_weights'] = {
-            'sum': sum_of_weights,
-            'min_w': min_weights,
+            'sum': chk_sum_of_weights,
+            'min_w': chk_min_weights,
             'daily_volume': daily_volume,
         }
         self._report[strategy.name]['change_weights'] = {
@@ -100,7 +104,10 @@ class ReportBuilder:
             'volume_percent': volume_percent, 
             'normalize': normalize
         }
-    
+
+    def _round(self, x: float, precision: int = 5):
+        return round(x, precision)
+
     def _check_weights_change(self, weights: dict[str, dict[str, float]]) -> tuple[bool, bool, bool]:
         fnormalize = weights['clear'] != weights['normalize']
         fmin_w = weights['normalize'] != weights['min_weights']
@@ -255,6 +262,11 @@ class ReportBuilder:
                 padding: 12px 15px;
                 text-align: left;
                 border: 1px solid #ddd;
+                max-height: 60px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                vertical-align: top;
             }
             th {
                 background-color: #3498db;
@@ -379,9 +391,6 @@ class ReportBuilder:
                     for item in list_weights:
                         date = item['date']
                         weights = item['weights']
-
-                        weights = {coin: w for coin, w in weights.items() if w != 0}
-                        weights = dict(sorted(weights.items(), key=lambda p: abs(p[1]), reverse=True))
                         row = {'date': date, 'weights': weights}
                         expanded.append(row)
 

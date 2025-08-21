@@ -1,10 +1,12 @@
 from functools import partial
+from typing import Any
 
 import numpy as np
 import cvxpy as cp
 
 from enum import StrEnum
-from cvxpy import psd_wrap
+from cvxpy import psd_wrap, Variable
+from cvxpy.constraints import Inequality
 from pandas import DataFrame, Series
 
 from .utils import (
@@ -63,14 +65,20 @@ def max_profit(prices: DataFrame, min_weights: float = 0.0) -> dict[str, float]:
     return weights
 
 
-def sharp(prices: DataFrame, min_weights: float = 0.0, risk_free_rate: float = 0.0, short: bool = False) -> dict[str, float]:
-    weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, is_short=short, risk_free_rate=risk_free_rate))
+def sharp(
+        prices: DataFrame,
+        min_weights: float = 0.0,
+        max_weights: dict[str, float] | None = None,
+        risk_free_rate: float = 0.0,
+        short: bool = False
+) -> dict[str, float]:
+    weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, max_weights=max_weights, is_short=short, risk_free_rate=risk_free_rate))
     if weights is None:
-        weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, is_short=short, risk_free_rate=risk_free_rate, psd=True))
+        weights = optimize(prices, partial(sharp_ratio, min_weights=min_weights, max_weights=max_weights, is_short=short, risk_free_rate=risk_free_rate, psd=True))
     if weights is None:
-        weights = optimize(prices, partial(sharp_ratio, min_weights=0, is_short=short, risk_free_rate=risk_free_rate))
+        weights = optimize(prices, partial(sharp_ratio, min_weights=0, max_weights=max_weights, is_short=short, risk_free_rate=risk_free_rate))
     if weights is None:
-        weights = optimize(prices, partial(sharp_ratio, min_weights=0, is_short=short, risk_free_rate=risk_free_rate, psd=True))
+        weights = optimize(prices, partial(sharp_ratio, min_weights=0, max_weights=max_weights, is_short=short, risk_free_rate=risk_free_rate, psd=True))
     return weights
 
 
@@ -168,6 +176,7 @@ def sharp_ratio(
         data: DataFrame,
         risk_type: RiskType = RiskType.LEDOIT_WOLF,
         min_weights: float = 0.0,
+        max_weights: dict[str, float] | None = None,
         risk_free_rate: float = 0.0,
         smearing_coefficient: float = 0.0,
         is_short: bool = False,
@@ -192,6 +201,8 @@ def sharp_ratio(
         cp.abs(weights) <= k * leverage,
         k >= 0,
     ]
+    if max_weights is not None:
+        constraints += get_max_weights_constraints(data, max_weights, weights, k, is_short=is_short)
 
     problem = cp.Problem(objective, constraints)
     for solver in cp.installed_solvers():
@@ -206,3 +217,23 @@ def sharp_ratio(
     weights = np.array(weights.value / k.value, ndmin=2).T  # type: ignore
     return weights # type: ignore
 
+
+def get_max_weights_constraints(
+        data: DataFrame,
+        max_weights: dict[str, float],
+        weights: Variable,
+        k: Variable,
+        is_short: bool = False,
+) -> list[Inequality | Any]:
+    constraints = list()
+
+    columns = data.columns.tolist()
+    for coin, max_w in max_weights.items():
+        if coin in columns:
+            i = columns.index(coin)
+            if is_short:
+                constraints.append(weights[i] >= -max_w * k)
+            else:
+                constraints.append(weights[i] <=  max_w * k)
+
+    return constraints

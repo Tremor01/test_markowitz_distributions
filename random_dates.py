@@ -1,12 +1,15 @@
-import time
-from copy import deepcopy
-import pandas as pd
-from plotting import plot_metrics
-
-from portfolio_strategies.constants import START_CAPITAL
-from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy, ConvexMarkowitzSharpAlpha, ConvexMarkowitzSharpBruteForceRF
-from data import get_prices, get_volumes
+import random
+from typing import Any
+import  pandas as pd
 from checkers import ReportBuilder
+from data import get_volumes, get_prices
+from plotting import plot_metrics
+from portfolio_strategies import ConvexMarkowitzSharpBruteForceRF, SHARP_SHORT, StrategyBTC, Strategy
+from portfolio_strategies.constants import START_CAPITAL, Metrics
+from collections import defaultdict
+from copy import deepcopy
+import time
+
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -16,58 +19,43 @@ PRICES = get_prices()
 VOLUMES = get_volumes()
 
 
-def free_tests() -> tuple[pd.DataFrame, pd.DataFrame]:
-    prices  =  PRICES.iloc[869: 1965]
-    volumes = VOLUMES.iloc[869: 1965]
+def free_tests() -> tuple[Any, Any, int]:
+    left = random.randint(869, 1900)
+    prices  =  PRICES.iloc[left: 1965]
+    volumes = VOLUMES.iloc[left: 1965]
     valid_coins = [
         coin for coin in prices.columns
         if prices[coin].isna().sum() == 0 and prices[coin].isna().sum() == 0
     ]
-    return prices[valid_coins], volumes[valid_coins]
+    return prices[valid_coins], volumes[valid_coins], left
 
 
 def main():
     train, test = 30, 7
 
-    prices, volumes = free_tests()
-    # alpha_strat = ConvexMarkowitzSharpAlpha(1)
-    # s = [([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
-    # for strategies, train_period, step in s:
-    #     file_name = strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
-    #     t = time.time()
-    #     simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
-    #     print(time.time() - t)
+    statistics = defaultdict(lambda: defaultdict(list))
 
-    # for a in range(80, 81):
-    #     a /= 100
-    #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
-    #     s = [
-    #         ([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-    #     ]
-    #
-    #     for strategies, train_period, step in s:
-    #         file_name = strategies[0].name
-    #         t = time.time()
-    #         simulate(
-    #             deepcopy(strategies), file_name, train_period, step,
-    #             prices, volumes, f'report_alpha_{a * 100}_{int(100 - a * 100)}.html', plot=True
-    #         )
-    #         print(time.time() - t)
-
-    for rf in range(0, 1):
-        rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
-        s = [
-            ([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),
-        ]
+    for _ in range(10):
+        prices, volumes, rand = free_tests()
+        rf_strat = ConvexMarkowitzSharpBruteForceRF(0)
+        s = [([rf_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
 
         for strategies, train_period, step in s:
-            file_name = 'alpha_span_brute_force_max25' #strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+            file_name = f'alpha_brute_force_{rand}'
             t = time.time()
-            simulate(
+            res = simulate(
                 deepcopy(strategies), file_name, train_period, step,
-                prices, volumes, f'report_{file_name}.html', plot=True
+                prices, volumes, f'report_{file_name}.html', plot=False
             )
+            for strategy in res:
+                statistics[strategy]['drowdawn_%'].append(res[strategy]['drowdawn_%'])
+                statistics[strategy]['drowdawn_$'].append(res[strategy]['drowdawn_$'])
+                statistics[strategy]['returns_%'].append(res[strategy]['returns_%'])
+                statistics[strategy]['returns_$'].append(res[strategy]['returns_$'])
             print(time.time() - t)
+
+    with open('random_stats.txt', 'w', encoding='utf-8') as f:
+        f.write(str(statistics))
 
 
 def simulate(
@@ -111,6 +99,15 @@ def simulate(
 
     if plot: plot_metrics(strategies, file_name)
 
+    return {
+        strategy.name: {
+            'drowdawn_%': min(strategy.metrics[Metrics.max_draw_down_percent]),
+            'drowdawn_$': min(strategy.metrics[Metrics.max_draw_down_absolut]),
+            'returns_%':  max(strategy.metrics[Metrics.total_returns_percent]),
+            'returns_$':  max(strategy.metrics[Metrics.total_returns_absolut]),
+        } for strategy in strategies
+    }
+
 
 def filter_coins(train_prices: pd.DataFrame, test_prices: pd.DataFrame, volumes: pd.DataFrame):
     # Монета существует минимум train_period + test_period
@@ -130,4 +127,3 @@ def filter_coins(train_prices: pd.DataFrame, test_prices: pd.DataFrame, volumes:
 
 
 main()
-

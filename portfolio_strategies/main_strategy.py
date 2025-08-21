@@ -4,6 +4,7 @@ from functools import partial
 from typing import Callable
 from funcs import *
 from .constants import *
+from .constants import MAX_WEIGHTS
 
 
 class Strategy:
@@ -31,6 +32,8 @@ class Strategy:
         self.data_for_report = {
             'weights': defaultdict(lambda: defaultdict(dict)),
             'capital': defaultdict(float),
+            'alpha': defaultdict(float),
+            'span': defaultdict(float),
         }
 
     @property
@@ -67,7 +70,17 @@ class Strategy:
         self._weights.clear()
         self._quantities.clear()
 
-        self._weights = partial(self.strategy, min_weights=MIN_INVEST / self._capital)(prices)
+        self._weights = partial(
+            self.strategy,
+            min_weights=MIN_INVEST / self._capital,
+            # max_weights=MAX_WEIGHTS,
+        )(prices)
+
+        if isinstance(self._weights, tuple):
+            self._weights, alpha, span = self._weights
+            self.data_for_report['alpha'][prices.index[-1]] = alpha
+            self.data_for_report['span'][prices.index[-1]]  = span
+
         if self._weights is None:
             self._weights = dict()
 
