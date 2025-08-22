@@ -2,11 +2,13 @@ import time
 from copy import deepcopy
 import pandas as pd
 from plotting import plot_metrics
+import multiprocessing as mp
 
 from portfolio_strategies.constants import START_CAPITAL
 from portfolio_strategies import StrategyBTC, SHARP_SHORT, Strategy, ConvexMarkowitzSharpAlpha, ConvexMarkowitzSharpBruteForceRF
 from data import get_prices, get_volumes
 from checkers import ReportBuilder
+from itertools import product
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -26,10 +28,7 @@ def free_tests() -> tuple[pd.DataFrame, pd.DataFrame]:
     return prices[valid_coins], volumes[valid_coins]
 
 
-def main():
-    train, test = 30, 7
-
-    prices, volumes = free_tests()
+def main(train: int, test: int):
     # alpha_strat = ConvexMarkowitzSharpAlpha(1)
     # s = [([alpha_strat()] + deepcopy(SHARP_SHORT) + [StrategyBTC()], train, test),]
     # for strategies, train_period, step in s:
@@ -38,7 +37,7 @@ def main():
     #     simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
     #     print(time.time() - t)
 
-    # for a in range(0, 101, 10):
+    # for a in range(80, 81):
     #     a /= 100
     #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
     #     s = [
@@ -53,7 +52,7 @@ def main():
     #             prices, volumes, f'report_alpha_{a * 100}_{int(100 - a * 100)}.html', plot=True
     #         )
     #         print(time.time() - t)
-
+    prices, volumes = free_tests()
     for rf in range(0, 1):
         rf_strat = ConvexMarkowitzSharpBruteForceRF(rf)
         s = [
@@ -61,7 +60,7 @@ def main():
         ]
 
         for strategies, train_period, step in s:
-            file_name = 'alpha_span_brute_force_max25' #strategies[0].name + f'{train_period}_{step}_{START_CAPITAL}'
+            file_name = f'alpha_walpha_step0.05_mx15_{train}_{test}_{START_CAPITAL}'
             t = time.time()
             simulate(
                 deepcopy(strategies), file_name, train_period, step,
@@ -129,5 +128,18 @@ def filter_coins(train_prices: pd.DataFrame, test_prices: pd.DataFrame, volumes:
     return filtered_coin
 
 
-main()
+main(30, 7)
+if __name__ == '__main__':
+    train_values = [3, 7, 15, 30]
+    test_values  = [1, 7]
+    processes = []
 
+    for train, test in product(train_values, test_values):
+        if train >= test:
+            p = mp.Process(target=main, args=(train, test))
+            p.start()
+            print(f'Start {train} {test}')
+            processes.append(p)
+
+    for p in processes:
+        p.join()
