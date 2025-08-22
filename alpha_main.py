@@ -38,7 +38,7 @@ def main():
     #     simulate(deepcopy(strategies), file_name, train_period, step, prices, volumes)
     #     print(time.time() - t)
 
-    # for a in range(80, 81):
+    # for a in range(0, 101, 10):
     #     a /= 100
     #     alpha_strat = ConvexMarkowitzSharpAlpha(a)
     #     s = [
