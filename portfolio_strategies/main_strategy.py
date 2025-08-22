@@ -33,7 +33,7 @@ class Strategy:
             'weights': defaultdict(lambda: defaultdict(dict)),
             'capital': defaultdict(float),
             'alpha': defaultdict(float),
-            'span': defaultdict(float),
+            'walpha': defaultdict(float),
         }
 
     @property
@@ -73,13 +73,13 @@ class Strategy:
         self._weights = partial(
             self.strategy,
             min_weights=MIN_INVEST / self._capital,
-            # max_weights=MAX_WEIGHTS,
+            max_weights=MAX_WEIGHTS,
         )(prices)
 
         if isinstance(self._weights, tuple):
-            self._weights, alpha, span = self._weights
+            self._weights, alpha, walpha = self._weights
             self.data_for_report['alpha'][prices.index[-1]] = alpha
-            self.data_for_report['span'][prices.index[-1]]  = span
+            self.data_for_report['walpha'][prices.index[-1]]  = walpha
 
         if self._weights is None:
             self._weights = dict()

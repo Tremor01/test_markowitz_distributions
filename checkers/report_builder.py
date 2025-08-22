@@ -87,7 +87,7 @@ class ReportBuilder:
                 '$ min_weight': self._round(cur_min * capital),
                 '> daily_volume': self._round(daily_volume),
                 'alpha': strategy.data_for_report['alpha'][date],
-                'span': strategy.data_for_report['span'][date]
+                'walpha': strategy.data_for_report['walpha'][date]
             })
 
             weights = dict(sorted(weights.items(), key=lambda p: abs(p[1]), reverse=True))
